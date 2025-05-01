@@ -1,0 +1,328 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>餐飲規劃系統</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.9/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    console.log("Script is running...");
+
+    const { useState } = React;
+
+    // 錯誤邊界組件
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+              <h1 className="text-2xl font-bold text-red-600">發生錯誤</h1>
+              <p>{this.state.error?.message || "無法渲染頁面，請檢查控制台"}</p>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    const App = () => {
+      console.log("App component is rendering...");
+      const [currentPage, setCurrentPage] = useState(1);
+      const [selections, setSelections] = useState({
+        restaurantType: null,
+        menuTypes: [],
+        decor: [],
+        marketing: [],
+        training: []
+      });
+      const [score, setScore] = useState(0);
+
+      const handleSelection = (pageKey, value, isSingle = false, scoreChange) => {
+        console.log(`Handling selection: ${pageKey}, ${value}, isSingle: ${isSingle}, scoreChange: ${scoreChange}`);
+        if (isSingle) {
+          setSelections({ ...selections, [pageKey]: value });
+          setScore(prevScore => prevScore + scoreChange);
+        } else {
+          const updatedSelections = selections[pageKey].includes(value)
+            ? selections[pageKey].filter(item => item !== value)
+            : [...selections[pageKey], value];
+          setSelections({ ...selections, [pageKey]: updatedSelections });
+          setScore(prevScore => prevScore + scoreChange);
+        }
+      };
+
+      const getResult = () => {
+        if (score >= 12) {
+          return {
+            title: "夢幻餐飲顧問",
+            description: "太棒了！你精準掌握經營方向，從餐廳類型到員工訓練都完美決策，讓這間餐廳生意興隆，成為當地最受歡迎的用餐首選！",
+            indicators: [
+              "將原本價格高，但利潤低的菜色移除。",
+              "提昇出餐速度與服務品質。",
+              "推出義式或日式料理，與附近的美式餐廳做出市場區隔。",
+              "根據附近學生與上班族多的區域特性，推出CP值高的商業午餐。",
+              "減少座位數，提升舒適空間。",
+              "建立外帶服務。"
+            ],
+            border: "border-yellow-500"
+          };
+        } else if (score >= 9) {
+          return {
+            title: "專業餐飲規劃師",
+            description: "不錯！你大多數選擇都很明智，成功打造一間有潛力的義式餐廳。雖然有些細節還能再調整，但顧客滿意度和營收都在穩定成長！",
+            border: "border-gray-300"
+          };
+        } else if (score >= 4) {
+          return {
+            title: "菜鳥餐飲調查員",
+            description: "你的決策有些亮點，但不少選擇讓餐廳陷入困境。生意勉強維持，顧客來了又走，建議多聽市場需求，才能讓餐廳站穩腳步。",
+            border: "border-gray-500"
+          };
+        } else {
+          return {
+            title: "誤闖餐飲市場的小白兔",
+            description: "你的經營策略出了大問題！高成本、低效率讓這間餐廳舉步維艱，顧客流失嚴重，得重新檢討方向才能重振旗鼓。",
+            border: "border-gray-500"
+          };
+        }
+      };
+
+      const handleNext = () => {
+        if (currentPage === 2 && !selections.restaurantType) return;
+        if (currentPage === 3 && selections.menuTypes.length === 0) return;
+        if (currentPage === 4 && selections.decor.length === 0) return;
+        if (currentPage === 5 && selections.marketing.length === 0) return;
+        if (currentPage === 6 && selections.training.length === 0) return;
+        console.log(`Moving to page ${currentPage + 1}`);
+        setCurrentPage(currentPage + 1);
+      };
+
+      const renderPage = () => {
+        console.log(`Rendering page ${currentPage}`);
+        switch (currentPage) {
+          case 1:
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4')" }}>
+                <h1 className="text-4xl font-bold text-white mb-8 text-center">開始規劃餐廳的經營策略</h1>
+                <button onClick={() => setCurrentPage(2)} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">開始規劃</button>
+              </div>
+            );
+          case 2:
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                <h1 className="text-3xl font-bold mb-6">決定你的餐廳類型</h1>
+                <img src="https://images.unsplash.com/photo-1552566626-52f8b828add9" alt="餐廳" className="w-64 h-40 mb-6 rounded-lg" />
+                <div className="flex flex-col space-y-4">
+                  {[
+                    { label: "義式餐廳", value: "Italian", score: 1 },
+                    { label: "日式餐廳", value: "Japanese", score: 1 },
+                    { label: "美式餐廳", value: "American", score: -1 }
+                  ].map(option => (
+                    <button
+                      key={option.value}
+                      onClick={() => handleSelection("restaurantType", option.label, true, selections.restaurantType ? (selections.restaurantType === option.label ? 0 : option.score - (selections.restaurantType ===  === "義式餐廳" || selections.restaurantType === "日式餐廳" ? 1 : -1)) : option.score)}
+                      className={`px-4 py-2 rounded-lg ${selections.restaurantType === option.label ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={handleNext} className="mt-6 bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">接著來決定餐點類型吧！</button>
+              </div>
+            );
+          case 3:
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                <h1 className="text-3xl font-bold mb-6">決定你的餐點類型</h1>
+                <div className="flex flex-col space-y-4">
+                  {[
+                    { label: "食材簡單的創意混搭料理", score: 1 },
+                    { label: "吸引客人嘗鮮的季節限定料理", score: 1 },
+                    { label: "食材精緻的海鮮套餐", score: -1 },
+                    { label: "滿足老顧客的慢工出細活的手作料理", score: -1 },
+                    { label: "利潤低的平價商業午餐", score: 1 },
+                    { label: "利潤高的豪華套餐", score: -1 }
+                  ].map(option => (
+                    <button
+                      key={option.label}
+                      onClick={() => handleSelection("menuTypes", option.label, false, selections.menuTypes.includes(option.label) ? -option.score : option.score)}
+                      className={`px-4 py-2 rounded-lg ${selections.menuTypes.includes(option.label) ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                      disabled={selections.menuTypes.length >= 4 && !selections.menuTypes.includes(option.label)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={handleNext} className="mt-6 bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">接著來決定餐廳的裝潢與座位配置吧！</button>
+              </div>
+            );
+          case 4:
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                <h1 className="text-3xl font-bold mb-6">決定餐廳裝潢與座位配置</h1>
+                <div className="flex flex-col space-y-4">
+                  {[
+                    { label: "平價創意裝潢，吸引年輕族群", score: 1 },
+                    { label: "增加座位，提高用餐容納人數", score: -1 },
+                    { label: "減少座位，打造舒適空間", score: 1 },
+                    { label: "高級豪華裝潢，提升環境質感", score: -1 }
+                  ].map(option => (
+                    <button
+                      key={option.label}
+                      onClick={() => handleSelection("decor", option.label, false, selections.decor.includes(option.label) ? -option.score : option.score)}
+                      className={`px-4 py-2 rounded-lg ${selections.decor.includes(option.label) ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                      disabled={selections.decor.length >= 3 && !selections.decor.includes(option.label)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={handleNext} className="mt-6 bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">接著來決定餐廳的行銷方式吧！</button>
+              </div>
+            );
+          case 5:
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                <h1 className="text-3xl font-bold mb-6">決定餐廳行銷方式</h1>
+                <div className="flex flex-col space-y-4">
+                  {[
+                    { label: "推出會員專屬折扣", score: 1 },
+                    { label: "舉辦降價促銷活動", score: -1 },
+                    { label: "內用不限時，提高客人滿足感", score: -1 },
+                    { label: "專注餐點品質建立口碑", score: 1 },
+                    { label: "提供外帶與線上訂餐優惠", score: 1 },
+                    { label: "請網紅宣傳增加曝光", score: -1 }
+                  ].map(option => (
+                    <button
+                      key={option.label}
+                      onClick={() => handleSelection("marketing", option.label, false, selections.marketing.includes(option.label) ? -option.score : option.score)}
+                      className={`px-4 py-2 rounded-lg ${selections.marketing.includes(option.label) ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                      disabled={selections.marketing.length >= 4 && !selections.marketing.includes(option.label)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={handleNext} className="mt-6 bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">最後來決定員工訓練方式吧！</button>
+              </div>
+            );
+          case 6:
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                <h1 className="text-3xl font-bold mb-6">決定員工訓練方式</h1>
+                <div className="flex flex-col space-y-4">
+                  {[
+                    { label: "訓練員工主動介紹套餐優惠", score: 1 },
+                    { label: "訓練員工定期學習不同的季節料理", score: 1 },
+                    { label: "訓練員工製作複雜精緻的料理", score: -1 },
+                    { label: "要求員工專注快速送餐", score: -1 },
+                    { label: "提前備料維持出餐穩定", score: 1 },
+                    { label: "投入資金增加內場人力", score: 1 }
+                  ].map(option => (
+                    <button
+                      key={option.label}
+                      onClick={() => handleSelection("training", option.label, false, selections.training.includes(option.label) ? -option.score : option.score)}
+                      className={`px-4 py-2 rounded-lg ${selections.training.includes(option.label) ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+                      disabled={selections.training.length >= 4 && !selections.training.includes(option.label)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={handleNext} className="mt-6 bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">餐廳終於完工了！</button>
+              </div>
+            );
+          case 7:
+            const result = getResult();
+            return (
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+                <h1 className={`text-3xl font-bold mb-6 border-4 p-4 ${result.border}`}>{result.title}</h1>
+                <p className="text-lg mb-6 text-center max-w-md">{result.description}</p>
+                {result.indicators && (
+                  <ul className="list-disc text-left max-w-md">
+                    {result.indicators.map((indicator, index) => (
+                      <li key={index}>{indicator}</li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-6 text-lg">你的分數：{score}</p>
+                <div className="mt-6 text-left max-w-md">
+                  <p className="font-bold">你的選擇：</p>
+                  <p>餐廳類型：{selections.restaurantType || "無"}</p>
+                  <p>餐點類型：{selections.menuTypes.join(", ") || "無"}</p>
+                  <p>裝潢與座位：{selections.decor.join(", ") || "無"}</p>
+                  <p>行銷方式：{selections.marketing.join(", ") || "無"}</p>
+                  <p>員工訓練：{selections.training.join(", ") || "無"}</p>
+                  <p className="mt-4">請將以上選擇、分數 ({score}) 和結果標題 ({result.title}) 複製到 Google 表單：<a href="[YOUR_FORM_LINK]" target="_blank" className="text-blue-500 underline">點此提交</a></p>
+                </div>
+              </div>
+            );
+          default:
+            return null;
+        }
+      };
+
+      return <div>{renderPage()}</div>;
+    };
+
+    console.log("Rendering React app...");
+    ReactDOM.render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+      document.getElementById("root")
+    );
+  </script>
+</body>
+</html>
