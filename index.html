@@ -53,7 +53,7 @@
   <script type="text/babel">
     console.log("Script is running...");
 
-    const { useState } = React;
+    const { useState, useEffect } = React;
 
     // 錯誤邊界組件
     class ErrorBoundary extends React.Component {
@@ -79,6 +79,7 @@
     const App = () => {
       console.log("App component is rendering...");
       const [currentPage, setCurrentPage] = useState(1);
+      const [nameOrId, setNameOrId] = useState("");
       const [selections, setSelections] = useState({
         restaurantType: null,
         menuTypes: [],
@@ -139,6 +140,10 @@
       };
 
       const handleNext = () => {
+        if (currentPage === 1 && !nameOrId.trim()) {
+          alert("請輸入姓名或編號！");
+          return;
+        }
         if (currentPage === 2 && !selections.restaurantType) return;
         if (currentPage === 3 && selections.menuTypes.length === 0) return;
         if (currentPage === 4 && selections.decor.length === 0) return;
@@ -148,21 +153,84 @@
         setCurrentPage(currentPage + 1);
       };
 
+      // 生成 Google 表單提交 URL
+      const generateFormUrl = () => {
+        const formId = "1ubCtQQjk3h2f5wGAaBU3arTMLYYDqF-qmDq7aHeRIxM"; // 替換為你的實際表單 ID
+        const baseUrl = `https://docs.google.com/forms/d/e/${formId}/viewform?usp=pp_url`;
+
+        // 表單欄位 ID（替換為你的實際 entry.XXXX）
+        const fieldIds = {
+          nameOrId: "entry.290424260",
+          restaurantType: "entry.143385541",
+          menuTypes: "entry.621881023",
+          decor: "entry.530148878",
+          marketing: "entry.344815327",
+          training: "entry.1919562792",
+          score: "entry.1280502735",
+          resultTitle: "entry.1050328370"
+        };
+
+        // 編碼選項
+        let params = [];
+        if (nameOrId) {
+          params.push(`${fieldIds.nameOrId}=${encodeURIComponent(nameOrId)}`);
+        }
+        if (selections.restaurantType) {
+          params.push(`${fieldIds.restaurantType}=${encodeURIComponent(selections.restaurantType)}`);
+        }
+        selections.menuTypes.forEach(item => {
+          params.push(`${fieldIds.menuTypes}=${encodeURIComponent(item)}`);
+        });
+        selections.decor.forEach(item => {
+          params.push(`${fieldIds.decor}=${encodeURIComponent(item)}`);
+        });
+        selections.marketing.forEach(item => {
+          params.push(`${fieldIds.marketing}=${encodeURIComponent(item)}`);
+        });
+        selections.training.forEach(item => {
+          params.push(`${fieldIds.training}=${encodeURIComponent(item)}`);
+        });
+        params.push(`${fieldIds.score}=${encodeURIComponent(score)}`);
+        params.push(`${fieldIds.resultTitle}=${encodeURIComponent(getResult().title)}`);
+
+        return `${baseUrl}&${params.join("&")}`;
+      };
+
+      // 第 7 頁自動跳轉
+      useEffect(() => {
+        if (currentPage === 7) {
+          const timer = setTimeout(() => {
+            window.location.href = generateFormUrl();
+          }, 3000); // 延遲 3 秒
+          return () => clearTimeout(timer);
+        }
+      }, [currentPage]);
+
       const renderPage = () => {
         console.log(`Rendering page ${currentPage}`);
         switch (currentPage) {
           case 1:
             return (
-              <div className="flex flex-col items-center justify-center h-screen bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4')" }}>
+              <div className="flex flex-col items-center justify-center h-screen bg-gray-800">
                 <h1 className="text-4xl font-bold text-white mb-8 text-center">開始規劃餐廳的經營策略</h1>
-                <button onClick={() => setCurrentPage(2)} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">開始規劃</button>
+                <div className="mb-6">
+                  <label htmlFor="nameOrId" className="block text-white text-lg mb-2">姓名或編號（必填）</label>
+                  <input
+                    id="nameOrId"
+                    type="text"
+                    value={nameOrId}
+                    onChange={(e) => setNameOrId(e.target.value)}
+                    className="px-4 py-2 rounded-lg w-64"
+                    required
+                  />
+                </div>
+                <button onClick={handleNext} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">開始規劃</button>
               </div>
             );
           case 2:
             return (
               <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
                 <h1 className="text-3xl font-bold mb-6">決定你的餐廳類型</h1>
-                <img src="https://images.unsplash.com/photo-1552566626-52f8b828add9" alt="餐廳" className="w-64 h-40 mb-6 rounded-lg" />
                 <div className="flex flex-col space-y-4">
                   {[
                     { label: "義式餐廳", value: "Italian", score: 1 },
@@ -171,7 +239,7 @@
                   ].map(option => (
                     <button
                       key={option.value}
-                      onClick={() => handleSelection("restaurantType", option.label, true, selections.restaurantType ? (selections.restaurantType === option.label ? 0 : option.score - (selections.restaurantType ===  === "義式餐廳" || selections.restaurantType === "日式餐廳" ? 1 : -1)) : option.score)}
+                      onClick={() => handleSelection("restaurantType", option.label, true, selections.restaurantType ? (selections.restaurantType === option.label ? 0 : option.score - (selections.restaurantType === "義式餐廳" || selections.restaurantType === "日式餐廳" ? 1 : -1)) : option.score)}
                       className={`px-4 py-2 rounded-lg ${selections.restaurantType === option.label ? "bg-blue-500 text-white" : "bg-gray-200"}`}
                     >
                       {option.label}
@@ -299,12 +367,13 @@
                 <p className="mt-6 text-lg">你的分數：{score}</p>
                 <div className="mt-6 text-left max-w-md">
                   <p className="font-bold">你的選擇：</p>
+                  <p>姓名或編號：{nameOrId || "無"}</p>
                   <p>餐廳類型：{selections.restaurantType || "無"}</p>
                   <p>餐點類型：{selections.menuTypes.join(", ") || "無"}</p>
                   <p>裝潢與座位：{selections.decor.join(", ") || "無"}</p>
                   <p>行銷方式：{selections.marketing.join(", ") || "無"}</p>
                   <p>員工訓練：{selections.training.join(", ") || "無"}</p>
-                  <p className="mt-4">請將以上選擇、分數 ({score}) 和結果標題 ({result.title}) 複製到 Google 表單：<a href="[YOUR_FORM_LINK]" target="_blank" className="text-blue-500 underline">點此提交</a></p>
+                  <p className="mt-4 text-blue-500">即將自動提交到 Google 表單...</p>
                 </div>
               </div>
             );
